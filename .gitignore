@@ -1,0 +1,13 @@
+.env
+.DS_Store
+__pycache__/
+*.pyc
+venv/
+*.zip
+rankovi_backup.sql
+skored-data-key.json
+cloud-sql-proxy
+images/
+www.swflhealthandhydration.com/
+rankovi-engine/
+rankovi-engine-v2/

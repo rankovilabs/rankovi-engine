@@ -1,0 +1,25 @@
+# ── Rankovi Engine Job ─────────────────────────────────────────────────────────
+# Runs the GEO prompt matrix against all AI engines
+# Deployed to Cloud Run Jobs as rankovi-engine-job
+# Triggered by Cloud Scheduler or manual POST
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy full engine
+COPY api/        ./api/
+COPY config/     ./config/
+COPY db/         ./db/
+COPY parser/     ./parser/
+COPY runner/     ./runner/
+COPY main.py     .
+
+# Cloud Run Jobs run this as the entrypoint
+# BRAND_ID env var controls which brand to run (default: all active brands)
+CMD ["python", "main.py", "--all-brands"]

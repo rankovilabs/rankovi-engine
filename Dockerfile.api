@@ -1,0 +1,32 @@
+# ── Rankovi API Service ────────────────────────────────────────────────────────
+# Serves the FastAPI backend + console dashboard
+# Deployed to Cloud Run as rankovi-api
+FROM python:3.11-slim
+
+# Don't buffer stdout/stderr — important for Cloud Run logs
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+# Install dependencies first (layer cached unless requirements change)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY api/        ./api/
+COPY dashboard/  ./dashboard/
+COPY config/     ./config/
+COPY parser/     ./parser/
+COPY db/         ./db/
+
+# Copy startup script
+COPY scripts/start_api.sh ./start_api.sh
+RUN chmod +x ./start_api.sh
+
+# Cloud Run sets PORT env var — default 8080
+ENV PORT=8080
+
+EXPOSE 8080
+
+CMD ["./start_api.sh"]

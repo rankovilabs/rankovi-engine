@@ -1,0 +1,135 @@
+# ── Rankovi Cloud Build Pipeline ──────────────────────────────────────────────
+# Triggered automatically on push to main branch
+# Builds both images, pushes to Artifact Registry, deploys to Cloud Run
+#
+# Set these substitutions in Cloud Build trigger config:
+#   _PROJECT_ID  = your GCP project ID
+#   _REGION      = us-central1 (or your region)
+#   _DB_INSTANCE = your Cloud SQL instance connection name
+
+substitutions:
+  _PROJECT_ID: rankovi-prod
+  _REGION: us-central1
+  _API_SERVICE: rankovi-api
+  _ENGINE_JOB: rankovi-engine-job
+  _REPO: rankovi
+  _DB_INSTANCE: rankovi-prod:us-central1:rankovi-db
+
+steps:
+  # ── Step 1: Build API image ──────────────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: build-api
+    args:
+      - build
+      - -f
+      - Dockerfile.api
+      - -t
+      - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO}/${_API_SERVICE}:$COMMIT_SHA
+      - -t
+      - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO}/${_API_SERVICE}:latest
+      - .
+
+  # ── Step 2: Build Engine image ───────────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: build-engine
+    args:
+      - build
+      - -f
+      - Dockerfile.engine
+      - -t
+      - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO}/${_ENGINE_JOB}:$COMMIT_SHA
+      - -t
+      - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO}/${_ENGINE_JOB}:latest
+      - .
+
+  # ── Step 3: Push API image ───────────────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: push-api
+    waitFor: [build-api]
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO}/${_API_SERVICE}
+
+  # ── Step 4: Push Engine image ────────────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: push-engine
+    waitFor: [build-engine]
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO}/${_ENGINE_JOB}
+
+  # ── Step 5: Deploy API to Cloud Run ─────────────────────────────────────────
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-api
+    waitFor: [push-api]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_API_SERVICE}
+      - --image
+      - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO}/${_API_SERVICE}:$COMMIT_SHA
+      - --region
+      - ${_REGION}
+      - --platform
+      - managed
+      - --allow-unauthenticated
+      - --min-instances
+      - '1'
+      - --max-instances
+      - '10'
+      - --memory
+      - 512Mi
+      - --cpu
+      - '1'
+      - --port
+      - '8080'
+      - --set-secrets
+      - DB_PASSWORD=rankovi-db-password:latest,OPENAI_API_KEY=openai-api-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,PERPLEXITY_API_KEY=perplexity-api-key:latest
+      - --set-env-vars
+      - DB_HOST=/cloudsql/${_DB_INSTANCE},DB_NAME=rankovi,DB_USER=rankovi,DB_PORT=5432,RANKOVI_ENV=production
+      - --add-cloudsql-instances
+      - ${_DB_INSTANCE}
+      - --service-account
+      - rankovi-api@${_PROJECT_ID}.iam.gserviceaccount.com
+
+  # ── Step 6: Update Engine Job ────────────────────────────────────────────────
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-engine-job
+    waitFor: [push-engine]
+    entrypoint: gcloud
+    args:
+      - run
+      - jobs
+      - update
+      - ${_ENGINE_JOB}
+      - --image
+      - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO}/${_ENGINE_JOB}:$COMMIT_SHA
+      - --region
+      - ${_REGION}
+      - --memory
+      - 1Gi
+      - --cpu
+      - '2'
+      - --task-timeout
+      - 3600s
+      - --max-retries
+      - '1'
+      - --set-secrets
+      - DB_PASSWORD=rankovi-db-password:latest,OPENAI_API_KEY=openai-api-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,PERPLEXITY_API_KEY=perplexity-api-key:latest
+      - --set-env-vars
+      - DB_HOST=/cloudsql/${_DB_INSTANCE},DB_NAME=rankovi,DB_USER=rankovi,DB_PORT=5432,RANKOVI_ENV=production
+      - --add-cloudsql-instances
+      - ${_DB_INSTANCE}
+      - --service-account
+      - rankovi-engine@${_PROJECT_ID}.iam.gserviceaccount.com
+
+images:
+  - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO}/${_API_SERVICE}:$COMMIT_SHA
+  - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO}/${_ENGINE_JOB}:$COMMIT_SHA
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
