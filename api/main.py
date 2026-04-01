@@ -201,7 +201,7 @@ def brand_summary(brand_id: int):
                        SUM(CASE WHEN res.brand_mentioned THEN 1 ELSE 0 END) as total_mentions
                 FROM runs r
                 JOIN results res ON res.run_id = r.id
-                WHERE r.brand_id = %s AND r.status = 'complete'
+                WHERE r.brand_id = %s AND r.status IN ('complete', 'complete_with_errors')
                 GROUP BY r.id
                 ORDER BY r.started_at DESC
                 LIMIT 1
@@ -213,7 +213,7 @@ def brand_summary(brand_id: int):
                        ROUND(AVG(res.mention_rate)::numeric, 4) as avg_mention_rate
                 FROM runs r
                 JOIN results res ON res.run_id = r.id
-                WHERE r.brand_id = %s AND r.status = 'complete'
+                WHERE r.brand_id = %s AND r.status IN ('complete', 'complete_with_errors')
                 GROUP BY r.id
                 ORDER BY r.started_at DESC
                 LIMIT 5
@@ -590,9 +590,9 @@ def brand_benchmark(brand_id: int):
                 SELECT ROUND(AVG(res.mention_rate)::numeric * 100, 1) AS brand_score
                 FROM results res
                 JOIN runs r ON r.id = res.run_id
-                WHERE r.brand_id = %s AND r.status = 'complete'
+                WHERE r.brand_id = %s AND r.status IN ('complete', 'complete_with_errors')
                   AND r.id = (
-                      SELECT id FROM runs WHERE brand_id = %s AND status = 'complete'
+                      SELECT id FROM runs WHERE brand_id = %s AND status IN ('complete', 'complete_with_errors')
                       ORDER BY started_at DESC LIMIT 1
                   )
             """, (brand_id, brand_id))
@@ -614,7 +614,7 @@ def brand_benchmark(brand_id: int):
                 SELECT ROUND(AVG(res.mention_rate)::numeric * 100, 1) AS score, r.id AS run_id
                 FROM results res
                 JOIN runs r ON r.id = res.run_id
-                WHERE r.brand_id = %s AND r.status = 'complete'
+                WHERE r.brand_id = %s AND r.status IN ('complete', 'complete_with_errors')
                 GROUP BY r.id ORDER BY r.id DESC LIMIT 2
             """, (brand_id,))
             trend_rows = cur.fetchall()
