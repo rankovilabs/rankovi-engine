@@ -22,4 +22,4 @@ COPY main.py     .
 
 # Cloud Run Jobs run this as the entrypoint
 # BRAND_ID env var controls which brand to run (default: all active brands)
-CMD ["python", "main.py", "--all-brands"]
+CMD ["python", "main.py", "--all"]
